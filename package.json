@@ -1,0 +1,19 @@
+{
+  "name": "solana-member-passes",
+  "version": "1.0.0",
+  "description": "Member Pass Solana NFT Platform with Admin Dashboard",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build:backend": "cd backend && npm run build",
+    "build:frontend": "cd frontend && npm run build",
+    "install:all": "npm install && cd backend && npm install --legacy-peer-deps && cd ../frontend && npm install --legacy-peer-deps",
+    "clean": "rimraf node_modules backend/node_modules frontend/node_modules frontend/.next"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "rimraf": "^5.0.5"
+  }
+}

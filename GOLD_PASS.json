@@ -1,0 +1,16 @@
+{
+    "name": "Member Pass Gold",
+    "symbol": "PASS",
+    "description": "The official Member Pass Gold tier NFT collection",
+    "image": "ipfs://<image-cid>",
+    "external_url": "https://example.com",
+    "properties": {
+        "files": [
+            {
+                "uri": "ipfs://<image-cid>",
+                "type": "image/jpg"
+            }
+        ],
+        "category": "image"
+    }
+}
