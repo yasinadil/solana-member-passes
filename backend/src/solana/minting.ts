@@ -57,64 +57,6 @@ export async function mintNFTToWallet(
 }
 
 /**
- * Prepares a mint transaction for user to sign.
- * Returns an unsigned transaction that includes payment.
- * @param metadataUri - The metadata JSON URI (from Pinata) to use for this NFT
- * @param nftName - Optional custom name for the NFT
- */
-export async function prepareMintTransaction(
-  collectionAddress: string,
-  payerWallet: string,
-  priceInSol: number,
-  metadataUri?: string,
-  nftName?: string
-): Promise<Transaction> {
-  const umi = getUmi();
-  
-  const assetSigner = generateSigner(umi);
-  const collectionPubkey = publicKey(collectionAddress);
-  const payer = publicKey(payerWallet);
-  
-  // Fetch collection to get proper reference
-  const collection = await fetchCollectionV1(umi, collectionPubkey);
-  
-  // Use provided metadata URI, or fall back to collection URI
-  const uri = metadataUri || collection.uri;
-  const name = nftName || 'Member Pass NFT';
-  
-  // Create the mint instruction
-  const mintBuilder = create(umi, {
-    asset: assetSigner,
-    collection,
-    owner: payer,
-    name,
-    uri,
-  });
-  
-  // Build the transaction
-  await mintBuilder.buildAndSign(umi);
-  
-  // Convert to web3.js Transaction format for frontend
-  const tx = new Transaction();
-  
-  // Add payment transfer if price > 0
-  if (priceInSol > 0) {
-    const treasuryWallet = process.env.TREASURY_WALLET_ADDRESS;
-    if (treasuryWallet) {
-      tx.add(
-        SystemProgram.transfer({
-          fromPubkey: new PublicKey(payerWallet),
-          toPubkey: new PublicKey(treasuryWallet),
-          lamports: Math.floor(priceInSol * LAMPORTS_PER_SOL),
-        })
-      );
-    }
-  }
-  
-  return tx;
-}
-
-/**
  * Verifies an NFT exists and is owned by a wallet.
  */
 export async function verifyNFTOwnership(
@@ -176,6 +118,13 @@ export async function verifyPayment(
     
     if (payerIndex === -1 || treasuryIndex === -1) {
       console.error('[Payment] Payer or treasury not found in transaction');
+      return false;
+    }
+
+    // The claimed payer must have signed the transaction (being present in the account list is not
+    // enough: an attacker could otherwise present any transfer that merely references their wallet).
+    if (payerIndex >= tx.transaction.message.header.numRequiredSignatures) {
+      console.error('[Payment] Payer did not sign the transaction');
       return false;
     }
     

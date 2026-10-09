@@ -168,7 +168,7 @@ router.post(
             hasAccess: tokenGatingResult.hasAccess,
             highestTier: tokenGatingResult.highestTier,
             totalNFTs: tokenGatingResult.totalNFTs,
-            tiers: tokenGatingResult.tiers.map(t => t.name),
+            tiers: tokenGatingResult.tiers.map(t => t.tier),
           });
         } catch (error: any) {
           results.push({

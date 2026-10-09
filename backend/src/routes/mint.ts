@@ -98,22 +98,49 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
       console.log(`[Mint] Payment verified!`);
     }
     
-    // Mint NFT directly to user's wallet using backend authority
-    const nftName = `Member Pass ${tier.name} #${tier.minted_count + 1}`;
-    console.log(`[Mint] Minting ${nftName} to ${data.walletAddress}`);
-    
-    const result = await mintNFTToWallet(
-      tier.collection_address,
-      data.walletAddress,
-      tier.artwork_url,  // Pinata metadata JSON URL
-      nftName
-    );
-    
-    // Increment minted count
-    await supabase
+    // 1. Reserve a supply slot atomically: the update only matches if nobody else minted since we
+    //    read the tier, so concurrent requests can't push minted_count past supply_cap.
+    const slot = tier.minted_count + 1;
+    const { data: reserved } = await supabase
       .from('tiers')
-      .update({ minted_count: tier.minted_count + 1 })
-      .eq('id', data.tierId);
+      .update({ minted_count: slot })
+      .eq('id', data.tierId)
+      .eq('minted_count', tier.minted_count)
+      .select('id');
+    if (!reserved || reserved.length === 0) {
+      throw new AppError(409, 'Another mint just took this slot. Please retry.');
+    }
+    const releaseSlot = () =>
+      supabase.from('tiers').update({ minted_count: tier.minted_count }).eq('id', data.tierId).eq('minted_count', slot);
+
+    // 2. Claim the payment: payment_claims.signature is the primary key, so a signature can fund
+    //    exactly one mint (previously the same payment could be replayed for unlimited mints).
+    if (tier.price > 0) {
+      const { error: claimError } = await supabase
+        .from('payment_claims')
+        .insert({ signature: data.paymentSignature, wallet_address: data.walletAddress, tier_id: data.tierId });
+      if (claimError) {
+        await releaseSlot();
+        throw new AppError(409, 'This payment has already been used for a mint');
+      }
+    }
+
+    // 3. Mint directly to the user's wallet using the backend authority.
+    const nftName = `Member Pass ${tier.name} #${slot}`;
+    console.log(`[Mint] Minting ${nftName} to ${data.walletAddress}`);
+
+    let result;
+    try {
+      result = await mintNFTToWallet(tier.collection_address, data.walletAddress, tier.artwork_url, nftName);
+    } catch (mintError) {
+      // Give the slot and the payment back so the user can retry with the same signature.
+      await releaseSlot();
+      if (tier.price > 0) await supabase.from('payment_claims').delete().eq('signature', data.paymentSignature);
+      throw mintError;
+    }
+    if (tier.price > 0) {
+      await supabase.from('payment_claims').update({ mint_address: result.mintAddress }).eq('signature', data.paymentSignature);
+    }
     
     console.log(`[Mint] Success! Mint address: ${result.mintAddress}`);
     
@@ -123,7 +150,7 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
         mintAddress: result.mintAddress,
         txSignature: result.signature,
         tier: tier.name,
-        tokenNumber: tier.minted_count + 1,
+        tokenNumber: slot,
       },
     });
   } catch (error) {

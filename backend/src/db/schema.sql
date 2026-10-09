@@ -130,3 +130,12 @@ CREATE TRIGGER update_system_config_updated_at
 -- ALTER TABLE admin_users ENABLE ROW LEVEL SECURITY;
 -- ALTER TABLE system_config ENABLE ROW LEVEL SECURITY;
 
+
+-- One row per paid mint. The primary key makes a payment signature single-use.
+CREATE TABLE IF NOT EXISTS payment_claims (
+  signature TEXT PRIMARY KEY,
+  wallet_address TEXT NOT NULL,
+  tier_id UUID NOT NULL REFERENCES tiers(id),
+  mint_address TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
